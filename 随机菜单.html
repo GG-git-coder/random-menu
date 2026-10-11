@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随机菜单 · 今天吃什么</title>
+<style>
+  :root {
+    --bg: #fdf6ec;
+    --card: #ffffff;
+    --ink: #2c2c2c;
+    --muted: #9a8f80;
+    --accent: #e8590c;
+    --accent-soft: #fff0e6;
+    --ring: #ffb38a;
+    --danger: #e03131;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background-image: radial-gradient(circle at 15% 20%, #fff3e0 0, transparent 40%),
+                      radial-gradient(circle at 85% 80%, #ffe8d9 0, transparent 40%);
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(60, 40, 20, 0.12);
+    padding: 40px;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+  }
+
+  .emoji { font-size: 68px; line-height: 1; display: inline-block; transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .emoji.bounce { transform: scale(1.15) rotate(-6deg); }
+
+  h1 { font-size: 22px; font-weight: 700; margin: 18px 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+
+  .dish { font-size: 40px; font-weight: 800; margin: 14px 0 8px; min-height: 56px; letter-spacing: 1px; }
+
+  .category {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    font-size: 13px; font-weight: 600; padding: 4px 14px; border-radius: 999px; margin-bottom: 20px;
+  }
+
+  /* 做法区块 */
+  .recipe {
+    background: #faf6f0;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin: 0 0 24px;
+    text-align: left;
+    min-height: 52px;
+  }
+  .recipe .recipe-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .recipe .recipe-text { font-size: 14px; line-height: 1.7; color: #5c5144; white-space: pre-wrap; }
+  .recipe .recipe-empty { font-size: 13px; color: var(--muted); }
+
+  .btn {
+    appearance: none; border: none; cursor: pointer;
+    font-size: 18px; font-weight: 700; padding: 15px 36px; border-radius: 999px;
+    letter-spacing: 2px; transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 8px 20px rgba(232, 89, 12, 0.35); }
+  .btn-primary:hover { background: #d9480f; transform: translateY(-2px); }
+  .btn-primary:active { transform: translateY(0) scale(0.97); box-shadow: 0 4px 12px rgba(232, 89, 12, 0.3); }
+  .btn-primary:disabled { background: #d9c8b8; box-shadow: none; cursor: default; transform: none; }
+
+  .btn-ghost {
+    background: transparent; color: var(--muted); font-size: 14px; font-weight: 600;
+    padding: 8px 16px; margin-top: 6px; letter-spacing: 1px;
+  }
+  .btn-ghost:hover { color: var(--accent); }
+
+  .history { margin-top: 24px; text-align: left; }
+  .history h2 { font-size: 14px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 13px; background: #f4ede4; color: #6b5d4c; padding: 5px 12px; border-radius: 999px; }
+
+  .foot { margin-top: 24px; color: var(--muted); font-size: 12px; }
+
+  /* 模态框 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(40, 25, 10, 0.45);
+    display: none; align-items: center; justify-content: center; padding: 20px; z-index: 10;
+  }
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: #fff; border-radius: 20px; width: 100%; max-width: 440px;
+    max-height: 84vh; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0,0,0,0.25);
+  }
+  .modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px 14px; border-bottom: 1px solid #f0e7dc;
+  }
+  .modal-head h3 { font-size: 18px; font-weight: 700; }
+  .modal-head .actions { display: flex; gap: 8px; align-items: center; }
+
+  .icon-btn {
+    background: #f4ede4; border: none; cursor: pointer; color: #6b5d4c;
+    width: 34px; height: 34px; border-radius: 10px; font-size: 17px; line-height: 1;
+    display: flex; align-items: center; justify-content: center; transition: background 0.15s;
+  }
+  .icon-btn:hover { background: #e9dfd2; }
+  .icon-btn.add { background: var(--accent); color: #fff; }
+  .icon-btn.add:hover { background: #d9480f; }
+
+  .modal-body { overflow-y: auto; padding: 14px 16px; }
+
+  /* 列表项 */
+  .item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px; border-radius: 12px; transition: background 0.15s;
+  }
+  .item:hover { background: #faf6f0; }
+  .item .i-emoji { font-size: 28px; flex-shrink: 0; }
+  .item .i-info { flex: 1; min-width: 0; }
+  .item .i-name { font-size: 15px; font-weight: 600; }
+  .item .i-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .item .i-meta .has-recipe { color: var(--accent); }
+  .item .i-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .item .icon-btn.sm { width: 30px; height: 30px; font-size: 14px; border-radius: 8px; }
+  .item .icon-btn.del:hover { background: #fdecec; color: var(--danger); }
+
+  .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 0; }
+
+  /* 表单 */
+  .form { display: none; padding: 14px 16px 18px; }
+  .form.open { display: block; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; color: #6b5d4c; margin-bottom: 6px; }
+  .field label .req { color: var(--danger); }
+  .field input, .field textarea {
+    width: 100%; border: 1px solid #e6dacb; border-radius: 10px;
+    padding: 10px 12px; font-size: 14px; font-family: inherit; color: var(--ink);
+    background: #fff; transition: border 0.15s, box-shadow 0.15s;
+  }
+  .field input:focus, .field textarea:focus { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.12); }
+  .field textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+  .field .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .row { display: flex; gap: 10px; }
+  .row .field { flex: 1; }
+  .emoji-input { text-align: center; font-size: 18px !important; }
+
+  .form-btns { display: flex; gap: 10px; }
+  .form-btns .btn { flex: 1; padding: 13px 0; font-size: 15px; }
+  .btn-secondary { background: #f4ede4; color: #6b5d4c; box-shadow: none; }
+  .btn-secondary:hover { background: #e9dfd2; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="emoji" id="emoji">🍽️</div>
+    <h1>今天吃什么？</h1>
+    <p class="subtitle">选择困难症救星 · 交给命运</p>
+
+    <div class="dish" id="dish">点我试试</div>
+    <div class="category" id="category">—</div>
+
+    <div class="recipe">
+      <div class="recipe-title">📖 做法</div>
+      <div class="recipe-text" id="recipeText"><span class="recipe-empty">这道菜还没有记录做法</span></div>
+    </div>
+
+    <button class="btn btn-primary" id="rollBtn">🎲 随机来一个</button>
+    <br>
+    <button class="btn btn-ghost" id="manageBtn">⚙️ 管理菜单</button>
+
+    <div class="history">
+      <h2>抽过的</h2>
+      <div class="chips" id="history"></div>
+    </div>
+  </div>
+
+  <p class="foot">点击按钮随机抽取一道菜，祝你好胃口 🍚</p>
+
+  <!-- 管理模态框 -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle">管理菜单</h3>
+        <div class="actions">
+          <button class="icon-btn add" id="addBtn" title="添加菜品">＋</button>
+          <button class="icon-btn" id="closeBtn" title="关闭">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body" id="listView"></div>
+
+      <div class="form" id="formView">
+        <div class="field">
+          <label>菜名 <span class="req">*</span></label>
+          <input type="text" id="fName" placeholder="例如：番茄炒蛋" maxlength="30">
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>表情</label>
+            <input type="text" id="fEmoji" class="emoji-input" placeholder="🍽️" maxlength="4">
+          </div>
+          <div class="field">
+            <label>分类</label>
+            <input type="text" id="fCategory" placeholder="例如：家常菜" maxlength="12">
+          </div>
+        </div>
+        <div class="field">
+          <label>做法</label>
+          <textarea id="fRecipe" placeholder="记录这道菜的做法、步骤或链接……（可选）"></textarea>
+          <div class="hint">可以写步骤、食材、或者一个菜谱链接</div>
+        </div>
+        <div class="form-btns">
+          <button class="btn btn-secondary" id="cancelBtn">取消</button>
+          <button class="btn btn-primary" id="saveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ===== 默认数据（首次使用；之后以 localStorage 为准）=====
+  const DEFAULT_MENU = [
+    { name: "番茄炒蛋", emoji: "🍅", category: "家常菜", recipe: "1. 番茄切块，鸡蛋打散加盐。\n2. 热油炒蛋至凝固盛出。\n3. 下番茄炒出汁，倒回鸡蛋翻炒，加糖盐调味即可。" },
+    { name: "红烧肉", emoji: "🍖", category: "硬菜", recipe: "1. 五花肉切块焯水。\n2. 炒糖色，下肉翻炒上色。\n3. 加料酒、生抽、老抽、冰糖和热水，小火炖 40 分钟，大火收汁。" },
+    { name: "宫保鸡丁", emoji: "🥜", category: "川菜" },
+    { name: "鱼香肉丝", emoji: "🥢", category: "川菜" },
+    { name: "麻婆豆腐", emoji: "🌶️", category: "川菜" },
+    { name: "糖醋排骨", emoji: "🍖", category: "硬菜" },
+    { name: "清蒸鲈鱼", emoji: "🐟", category: "海鲜" },
+    { name: "蒜蓉西兰花", emoji: "🥦", category: "素菜" },
+    { name: "酸辣土豆丝", emoji: "🥔", category: "素菜" },
+    { name: "黄焖鸡米饭", emoji: "🍗", category: "主食" },
+    { name: "兰州拉面", emoji: "🍜", category: "面食" },
+    { name: "扬州炒饭", emoji: "🍚", category: "主食" },
+    { name: "饺子", emoji: "🥟", category: "面食" },
+    { name: "火锅", emoji: "🍲", category: "聚餐" },
+    { name: "烤肉", emoji: "🥩", category: "聚餐" },
+    { name: "寿司", emoji: "🍣", category: "日料" },
+    { name: "炸鸡", emoji: "🍗", category: "快餐" },
+    { name: "披萨", emoji: "🍕", category: "快餐" },
+    { name: "汉堡", emoji: "🍔", category: "快餐" },
+    { name: "麻辣烫", emoji: "🍢", category: "小吃" },
+    { name: "螺蛳粉", emoji: "🍜", category: "小吃" },
+    { name: "煲仔饭", emoji: "🍚", category: "主食" },
+    { name: "白切鸡", emoji: "🍗", category: "粤菜" },
+    { name: "回锅肉", emoji: "🥓", category: "川菜" },
+  ];
+
+  const STORAGE_KEY = "random-menu-data-v1";
+  let menu = load();
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { /* 忽略损坏数据 */ }
+    return JSON.parse(JSON.stringify(DEFAULT_MENU));
+  }
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(menu));
+  }
+
+  // ===== DOM =====
+  const emojiEl = document.getElementById("emoji");
+  const dishEl = document.getElementById("dish");
+  const categoryEl = document.getElementById("category");
+  const recipeTextEl = document.getElementById("recipeText");
+  const rollBtn = document.getElementById("rollBtn");
+  const historyEl = document.getElementById("history");
+
+  const overlay = document.getElementById("overlay");
+  const listView = document.getElementById("listView");
+  const formView = document.getElementById("formView");
+  const modalTitle = document.getElementById("modalTitle");
+  const addBtn = document.getElementById("addBtn");
+  const closeBtn = document.getElementById("closeBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  const saveBtn = document.getElementById("saveBtn");
+
+  const fName = document.getElementById("fName");
+  const fEmoji = document.getElementById("fEmoji");
+  const fCategory = document.getElementById("fCategory");
+  const fRecipe = document.getElementById("fRecipe");
+
+  const history = [];
+  const MAX_HISTORY = 8;
+  let editingIndex = null; // null = 新增，数字 = 编辑的索引
+
+  function pick() {
+    return menu[Math.floor(Math.random() * menu.length)];
+  }
+
+  function renderRecipe(item) {
+    if (item.recipe && item.recipe.trim()) {
+      recipeTextEl.textContent = item.recipe.trim();
+    } else {
+      recipeTextEl.innerHTML = '<span class="recipe-empty">这道菜还没有记录做法，点「管理菜单」补充一下～</span>';
+    }
+  }
+
+  function renderMain(item) {
+    dishEl.textContent = item.name;
+    categoryEl.textContent = item.category || "—";
+    emojiEl.textContent = item.emoji || "🍽️";
+    renderRecipe(item);
+
+    emojiEl.classList.remove("bounce");
+    void emojiEl.offsetWidth;
+    emojiEl.classList.add("bounce");
+
+    historyEl.innerHTML = "";
+    history.forEach(h => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = h.name;
+      historyEl.appendChild(chip);
+    });
+  }
+
+  function roll() {
+    if (menu.length === 0) {
+      alert("菜单是空的，先点「管理菜单」添加几道菜吧！");
+      return;
+    }
+    rollBtn.disabled = true;
+    let count = 0;
+    const total = 18;
+    const timer = setInterval(() => {
+      const item = pick();
+      dishEl.textContent = item.name;
+      categoryEl.textContent = item.category || "—";
+      emojiEl.textContent = item.emoji || "🍽️";
+      count++;
+      if (count >= total) {
+        clearInterval(timer);
+        const final = pick();
+        history.push(final);
+        if (history.length > MAX_HISTORY) history.shift();
+        renderMain(final);
+        rollBtn.disabled = false;
+      }
+    }, 70);
+  }
+
+  // ===== 管理界面 =====
+  function openModal() { overlay.classList.add("open"); renderList(); }
+  function closeModal() { overlay.classList.remove("open"); }
+
+  function renderList() {
+    formView.classList.remove("open");
+    listView.style.display = "";
+    modalTitle.textContent = "管理菜单";
+
+    if (menu.length === 0) {
+      listView.innerHTML = '<div class="empty">还没有菜品，点右上角「＋」添加</div>';
+      return;
+    }
+
+    listView.innerHTML = "";
+    menu.forEach((item, i) => {
+      const row = document.createElement("div");
+      row.className = "item";
+
+      const emoji = document.createElement("div");
+      emoji.className = "i-emoji";
+      emoji.textContent = item.emoji || "🍽️";
+
+      const info = document.createElement("div");
+      info.className = "i-info";
+      const name = document.createElement("div");
+      name.className = "i-name";
+      name.textContent = item.name;
+      const meta = document.createElement("div");
+      meta.className = "i-meta";
+      const cat = item.category ? item.category : "未分类";
+      const hasRecipe = item.recipe && item.recipe.trim();
+      meta.innerHTML = cat + (hasRecipe
+        ? ' · <span class="has-recipe">有做法</span>'
+        : ' · <span>无做法</span>');
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const btns = document.createElement("div");
+      btns.className = "i-btns";
+      const edit = document.createElement("button");
+      edit.className = "icon-btn sm";
+      edit.title = "编辑";
+      edit.textContent = "✎";
+      edit.addEventListener("click", () => openForm(i));
+      const del = document.createElement("button");
+      del.className = "icon-btn sm del";
+      del.title = "删除";
+      del.textContent = "🗑";
+      del.addEventListener("click", () => removeItem(i));
+      btns.appendChild(edit);
+      btns.appendChild(del);
+
+      row.appendChild(emoji);
+      row.appendChild(info);
+      row.appendChild(btns);
+      listView.appendChild(row);
+    });
+  }
+
+  function openForm(index) {
+    editingIndex = index;
+    if (index === null) {
+      modalTitle.textContent = "添加菜品";
+      fName.value = ""; fEmoji.value = ""; fCategory.value = ""; fRecipe.value = "";
+    } else {
+      const item = menu[index];
+      modalTitle.textContent = "编辑菜品";
+      fName.value = item.name || "";
+      fEmoji.value = item.emoji || "";
+      fCategory.value = item.category || "";
+      fRecipe.value = item.recipe || "";
+    }
+    listView.style.display = "none";
+    formView.classList.add("open");
+    fName.focus();
+  }
+
+  function removeItem(index) {
+    const item = menu[index];
+    if (!confirm(`确定删除「${item.name}」吗？`)) return;
+    menu.splice(index, 1);
+    save();
+    renderList();
+  }
+
+  function saveForm() {
+    const name = fName.value.trim();
+    if (!name) { alert("菜名不能为空"); fName.focus(); return; }
+
+    const data = {
+      name,
+      emoji: fEmoji.value.trim() || "🍽️",
+      category: fCategory.value.trim() || "",
+      recipe: fRecipe.value.trim() || "",
+    };
+
+    if (editingIndex === null) {
+      menu.push(data);
+    } else {
+      menu[editingIndex] = data;
+    }
+    save();
+    renderList();
+  }
+
+  // ===== 事件 =====
+  rollBtn.addEventListener("click", roll);
+  manageBtn.addEventListener("click", openModal);
+  closeBtn.addEventListener("click", closeModal);
+  cancelBtn.addEventListener("click", () => { renderList(); });
+  saveBtn.addEventListener("click", saveForm);
+  addBtn.addEventListener("click", () => openForm(null));
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && overlay.classList.contains("open")) closeModal();
+  });
+
+  // 初始渲染占位
+  renderRecipe({ recipe: "" });
+</script>
+</body>
+</html>
